@@ -30,6 +30,7 @@ GSM_SMS sms;
 char senderNumber[20];
 
 
+
 // DMX Stuff
 
 #include <DmxSimple.h>
@@ -52,6 +53,12 @@ int OFF[3] = {
   0,0,0};
 int currentRGB[3] = {
   0,0,0};
+  
+  
+/// Incoming Payload
+int rgb[3];
+int value = 0;
+int index = 0;
   
   
 void setColor(int lightIndex, int* color, int fadeTime=0){
@@ -113,7 +120,6 @@ void setup()
   setColor(1, OFF);
   
   Serial.println("GSM initialized");
-  Serial.println("Waiting for messages");
 }
 
 void loop() 
@@ -126,22 +132,21 @@ void loop()
     Serial.println("Message received from:");
     
     // Read message bytes and print them
-    while(c=sms.read())
-      Serial.print(c);
-      
+    while(c=sms.read()){
+      processPayload(c);
+    }
+          
     Serial.println("\nEND OF MESSAGE");
-    dataRecieved();
     
     // Delete message from modem memory
     sms.flush();
     Serial.println("MESSAGE DELETED");
   }
 
-  delay(1000);
-
+  delay(500);
 }
 
-void dataRecieved(void){
+void pattern(void){
   setColor(2, BLUE);
   delay(200);
   setColor(2, GREEN);  
@@ -149,4 +154,36 @@ void dataRecieved(void){
   setColor(2, RED);  
   delay(200);    
   setColor(2, OFF);  
+}
+
+void processPayload(int c){
+
+  if ((c>='0') && (c<='9')) {
+    value = 10*value + c - '0';
+  } 
+  else {
+    if (c==',' || c=='p'){ 
+      rgb[index] = value;
+      index ++;
+    }
+    if (c=='p') {
+      handlePayload();
+      index = 0;
+    }
+    value = 0;
+  }
+}
+
+void handlePayload(void){
+    Serial.println('-');
+    Serial.print(rgb[0]);
+    Serial.print(',');
+    Serial.print(rgb[1]);
+    Serial.print(',');      
+    Serial.print(rgb[2]);
+    setColor(1, rgb);
+    delay(1000);
+    rgb[0] = 0;
+    rgb[1] = 0;
+    rgb[2] = 0;
 }
