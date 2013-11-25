@@ -19,31 +19,50 @@ char senderNumber[20];
 
 // DMX Stuff
 #include <DmxSimple.h>
+#include <Tween.h>
 
 int dmxPin = 11; // Cant use 3, as the GSM shield needs it
 int maxChannels = 6;
 int lightCount = 2;
 
-// Some constants
-int RED[3] = {
-  254,0,0};
-int GREEN[3] = {
-  0,254,0};
-int BLUE[3] = {
-  0,0,254};
-int WHITE[3] = {
-  254,254,254};
-int OFF[3] = {
-  0,0,0};
-int currentRGB[3] = {
-  0,0,0};
-  
+
+// Output
 // PWM Outputs for testing with LED strip
 #define REDPIN 5
 #define GREENPIN 9
 #define BLUEPIN 6
-  
-  
+int redPin = REDPIN;
+int grnPin = GREENPIN;
+int bluPin = BLUEPIN;
+
+
+// Color arrays
+int black[3]  = { 0, 0, 0 };
+int white[3]  = { 100, 100, 100 };
+int red[3]    = { 100, 0, 0 };
+int green[3]  = { 0, 100, 0 };
+int blue[3]   = { 0, 0, 100 };
+int yellow[3] = { 40, 95, 0 };
+int dimWhite[3] = { 30, 30, 30 };
+// etc.
+
+// Set initial color
+int redVal = black[0];
+int grnVal = black[1]; 
+int bluVal = black[2];
+
+int wait = 10;      // 10ms internal crossFade delay; increase for slower fades
+int hold = 0;       // Optional hold when a color is complete, before the next crossFade
+int DEBUG = 1;      // DEBUG counter; if set to 1, will write values back via serial
+int loopCount = 60; // How often should DEBUG report?
+int repeat = 3;     // How many times should we loop before stopping? (0 for no stop)
+int j = 0;          // Loop counter for repeat
+
+// Initialize color variables
+int prevR = redVal;
+int prevG = grnVal;
+int prevB = bluVal;
+    
 /// Incoming Payload
 int rgb[3];
 int value = 0;
@@ -70,7 +89,7 @@ void setColor(int lightIndex, int* color, int fadeTime=0){
 }
 
 void off(int lightIndex){
-  setColor(lightIndex, OFF);
+  setColor(lightIndex, black);
 }
 
 void all(int* color) {
@@ -89,8 +108,8 @@ void setup()
   // DMX Shield
   DmxSimple.usePin(dmxPin);
   DmxSimple.maxChannel(maxChannels); // 2 * 3 = 6
-  all(OFF);
-  setColor(1, OFF);
+  all(black);
+  setColor(1, black);
 
   Serial.begin(9600);
   while (!Serial) {
@@ -114,13 +133,13 @@ void setup()
     }
   }
   
-  setColor(1, RED);
-  delay(1000);
-  setColor(1, GREEN);
-  delay(1000);  
-  setColor(1, BLUE);
-  delay(1000);    
-  setColor(1, OFF);
+  setColor(1, red);
+  delay(500);
+  setColor(1, green);
+  delay(500);  
+  setColor(1, blue);
+  delay(500);    
+
   
   Serial.println("GSM initialized");
 }
@@ -149,15 +168,6 @@ void loop()
   delay(500);
 }
 
-void pattern(void){
-  setColor(2, BLUE);
-  delay(200);
-  setColor(2, GREEN);  
-  delay(200);  
-  setColor(2, RED);  
-  delay(200);    
-  setColor(2, OFF);  
-}
 
 // Converts a string of 000,000,000p into RGB char array
 // 'p' delineates the end of the payload.
@@ -180,10 +190,122 @@ void processPayload(int c){
 }
 
 void handlePayload(void){
-    setColor(1, rgb);
+    crossFade(rgb);
     delay(1000);
     rgb[0] = 0;
     rgb[1] = 0;
     rgb[2] = 0;
+}
+
+
+
+/* BELOW THIS LINE IS THE MATH -- YOU SHOULDN'T NEED TO CHANGE THIS FOR THE BASICS
+* 
+* The program works like this:
+* Imagine a crossfade that moves the red LED from 0-10, 
+*   the green from 0-5, and the blue from 10 to 7, in
+*   ten steps.
+*   We'd want to count the 10 steps and increase or 
+*   decrease color values in evenly stepped increments.
+*   Imagine a + indicates raising a value by 1, and a -
+*   equals lowering it. Our 10 step fade would look like:
+* 
+*   1 2 3 4 5 6 7 8 9 10
+* R + + + + + + + + + +
+* G   +   +   +   +   +
+* B     -     -     -
+* 
+* The red rises from 0 to 10 in ten steps, the green from 
+* 0-5 in 5 steps, and the blue falls from 10 to 7 in three steps.
+* 
+* In the real program, the color percentages are converted to 
+* 0-255 values, and there are 1020 steps (255*4).
+* 
+* To figure out how big a step there should be between one up- or
+* down-tick of one of the LED values, we call calculateStep(), 
+* which calculates the absolute gap between the start and end values, 
+* and then divides that gap by 1020 to determine the size of the step  
+* between adjustments in the value.
+*/
+
+int calculateStep(int prevValue, int endValue) {
+  int step = endValue - prevValue; // What's the overall gap?
+  if (step) {                      // If its non-zero, 
+    step = 1020/step;              //   divide by 1020
+  } 
+  return step;
+}
+
+/* The next function is calculateVal. When the loop value, i,
+*  reaches the step size appropriate for one of the
+*  colors, it increases or decreases the value of that color by 1. 
+*  (R, G, and B are each calculated separately.)
+*/
+
+int calculateVal(int step, int val, int i) {
+
+  if ((step) && i % step == 0) { // If step is non-zero and its time to change a value,
+    if (step > 0) {              //   increment the value if step is positive...
+      val += 1;           
+    } 
+    else if (step < 0) {         //   ...or decrement it if step is negative
+      val -= 1;
+    } 
+  }
+  // Defensive driving: make sure val stays in the range 0-255
+  if (val > 255) {
+    val = 255;
+  } 
+  else if (val < 0) {
+    val = 0;
+  }
+  return val;
+}
+
+/* crossFade() converts the percentage colors to a 
+*  0-255 range, then loops 1020 times, checking to see if  
+*  the value needs to be updated each time, then writing
+*  the color values to the correct pins.
+*/
+
+void crossFade(int color[3]) {
+  // Convert to 0-255
+  int R = (color[0] * 255) / 100;
+  int G = (color[1] * 255) / 100;
+  int B = (color[2] * 255) / 100;
+
+  int stepR = calculateStep(prevR, R);
+  int stepG = calculateStep(prevG, G); 
+  int stepB = calculateStep(prevB, B);
+
+  for (int i = 0; i <= 1020; i++) {
+    redVal = calculateVal(stepR, redVal, i);
+    grnVal = calculateVal(stepG, grnVal, i);
+    bluVal = calculateVal(stepB, bluVal, i);
+    // Set new colour to PWM pins and send DMX signal
+    int newColor[3] = {redVal, grnVal, bluVal};
+    setColor(1, newColor);
+
+    delay(wait); // Pause for 'wait' milliseconds before resuming the loop
+
+    if (DEBUG) { // If we want serial output, print it at the 
+      if (i == 0 or i % loopCount == 0) { // beginning, and every loopCount times
+        Serial.print("Loop/RGB: #");
+        Serial.print(i);
+        Serial.print(" | ");
+        Serial.print(redVal);
+        Serial.print(" / ");
+        Serial.print(grnVal);
+        Serial.print(" / ");  
+        Serial.println(bluVal); 
+      } 
+      DEBUG += 1;
+    }
+  }
+  // Update current values for next loop
+  prevR = redVal; 
+  prevG = grnVal; 
+  prevB = bluVal;
+  delay(hold); // Pause for optional 'wait' milliseconds before resuming the loop
 }
 
