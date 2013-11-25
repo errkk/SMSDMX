@@ -1,58 +1,47 @@
 /*
- SMS receiver
  
- This sketch, for the Arduino GSM shield, waits for a SMS message 
- and displays it through the Serial port. 
- 
- Circuit:
- * GSM shield attached to and Arduino
- * SIM card that can receive SMS messages
- 
- created 25 Feb 2012
- by Javier Zorzano / TD
- 
- This example is in the public domain.
- 
- http://arduino.cc/en/Tutorial/GSMExamplesReceiveSMS
+ SMS reciever sends out DMX signal to an RGB Light
+ on DMX channels 1,2 and 3
+ and for an onboard LED on PWM pins 5,6 and 9
  
 */
 
-// include the GSM library
+// GSM Setup
 #include <GSM.h>
 
 // PIN Number for the SIM
 #define PINNUMBER ""
 
-// initialize the library instances
 GSM gsmAccess;
 GSM_SMS sms;
 // Array to hold the number a SMS is retreived from
 char senderNumber[20];
 
-
-
 // DMX Stuff
-
 #include <DmxSimple.h>
 
-int dmxPin = 11;
+int dmxPin = 11; // Cant use 3, as the GSM shield needs it
 int maxChannels = 6;
 int lightCount = 2;
 
-///////////////////////////////////////////////
-int randomLedColour[3]; // for creating a random sequence
+// Some constants
 int RED[3] = {
   254,0,0};
 int GREEN[3] = {
-  0,255,0};
+  0,254,0};
 int BLUE[3] = {
   0,0,254};
 int WHITE[3] = {
-  255,255,255};
+  254,254,254};
 int OFF[3] = {
   0,0,0};
 int currentRGB[3] = {
   0,0,0};
+  
+// PWM Outputs for testing with LED strip
+#define REDPIN 5
+#define GREENPIN 9
+#define BLUEPIN 6
   
   
 /// Incoming Payload
@@ -62,7 +51,6 @@ int index = 0;
   
   
 void setColor(int lightIndex, int* color, int fadeTime=0){
-  /* Do a load of really boring array unpacking and channel calculations. */
   int r, g, b;
   r = color[0];
   g = color[1];
@@ -71,10 +59,14 @@ void setColor(int lightIndex, int* color, int fadeTime=0){
   int rChannel = firstChannel;
   int gChannel = rChannel + 1;
   int bChannel = gChannel + 1;
-
+  // Send DMX Signal
   DmxSimple.write(rChannel, r);
   DmxSimple.write(gChannel, g);
   DmxSimple.write(bChannel, b);
+  // PWM RGB signal to pins for debug LEDs
+  analogWrite(REDPIN, r);
+  analogWrite(GREENPIN, g);
+  analogWrite(BLUEPIN, b);
 }
 
 void off(int lightIndex){
@@ -89,11 +81,17 @@ void all(int* color) {
 
 void setup() 
 {
-  DmxSimple.usePin(dmxPin);
-  DmxSimple.maxChannel(maxChannels); // 2 * 3 = 6//  Serial.begin(9600);
-  all(OFF);  
+  // RGB LEDS
+  pinMode(REDPIN, OUTPUT);
+  pinMode(GREENPIN, OUTPUT);
+  pinMode(BLUEPIN, OUTPUT);
 
-  // initialize serial communications and wait for port to open:
+  // DMX Shield
+  DmxSimple.usePin(dmxPin);
+  DmxSimple.maxChannel(maxChannels); // 2 * 3 = 6
+  all(OFF);
+  setColor(1, OFF);
+
   Serial.begin(9600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for Leonardo only
@@ -115,8 +113,13 @@ void setup()
       delay(1000);
     }
   }
+  
+  setColor(1, RED);
+  delay(1000);
   setColor(1, GREEN);
-  delay(200);
+  delay(1000);  
+  setColor(1, BLUE);
+  delay(1000);    
   setColor(1, OFF);
   
   Serial.println("GSM initialized");
@@ -131,7 +134,7 @@ void loop()
   {
     Serial.println("Message received from:");
     
-    // Read message bytes and print them
+    // Read message bytes and set the RGB variable
     while(c=sms.read()){
       processPayload(c);
     }
@@ -156,6 +159,8 @@ void pattern(void){
   setColor(2, OFF);  
 }
 
+// Converts a string of 000,000,000p into RGB char array
+// 'p' delineates the end of the payload.
 void processPayload(int c){
 
   if ((c>='0') && (c<='9')) {
@@ -175,15 +180,10 @@ void processPayload(int c){
 }
 
 void handlePayload(void){
-    Serial.println('-');
-    Serial.print(rgb[0]);
-    Serial.print(',');
-    Serial.print(rgb[1]);
-    Serial.print(',');      
-    Serial.print(rgb[2]);
     setColor(1, rgb);
     delay(1000);
     rgb[0] = 0;
     rgb[1] = 0;
     rgb[2] = 0;
 }
+
