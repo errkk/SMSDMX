@@ -28,12 +28,9 @@ int lightCount = 2;
 
 // Output
 // PWM Outputs for testing with LED strip
-#define REDPIN 5
-#define GREENPIN 9
-#define BLUEPIN 6
-int redPin = REDPIN;
-int grnPin = GREENPIN;
-int bluPin = BLUEPIN;
+int redPin = 6;
+int grnPin = 9;
+int bluPin = 5;
 
 
 // Color arrays
@@ -83,9 +80,9 @@ void setColor(int lightIndex, int* color, int fadeTime=0){
   DmxSimple.write(gChannel, g);
   DmxSimple.write(bChannel, b);
   // PWM RGB signal to pins for debug LEDs
-  analogWrite(REDPIN, r);
-  analogWrite(GREENPIN, g);
-  analogWrite(BLUEPIN, b);
+  analogWrite(redPin, r);
+  analogWrite(grnPin, g);
+  analogWrite(bluPin, b);
 }
 
 void off(int lightIndex){
@@ -101,22 +98,23 @@ void all(int* color) {
 void setup() 
 {
   // RGB LEDS
-  pinMode(REDPIN, OUTPUT);
-  pinMode(GREENPIN, OUTPUT);
-  pinMode(BLUEPIN, OUTPUT);
+  pinMode(redPin, OUTPUT);
+  pinMode(grnPin, OUTPUT);
+  pinMode(bluPin, OUTPUT);
 
   // DMX Shield
   DmxSimple.usePin(dmxPin);
   DmxSimple.maxChannel(maxChannels); // 2 * 3 = 6
   all(black);
-  setColor(1, black);
-
-  Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for Leonardo only
-  } 
   
-  Serial.println("SMS Messages Receiver");
+  if (DEBUG) {
+    Serial.begin(9600);
+    while (!Serial) {
+      ; // wait for serial port to connect. Needed for Leonardo only
+    } 
+  
+    Serial.println("SMS Messages Receiver");
+  }
     
   // connection state
   boolean notConnected = true;
@@ -128,20 +126,24 @@ void setup()
       notConnected = false;
     else
     {
-      Serial.println("Not connected");
+      if (DEBUG) {
+        Serial.println("Not connected");
+      }
       delay(1000);
     }
   }
   
   setColor(1, red);
-  delay(500);
+  delay(200);
   setColor(1, green);
-  delay(500);  
+  delay(200);  
   setColor(1, blue);
-  delay(500);    
+  delay(200);
+  setColor(1, black);
 
-  
-  Serial.println("GSM initialized");
+  if (DEBUG) {
+    Serial.println("GSM initialized");
+  }
 }
 
 void loop() 
@@ -151,18 +153,20 @@ void loop()
   // If there are any SMSs available()  
   if (sms.available())
   {
-    Serial.println("Message received from:");
+    if (DEBUG) {
+      Serial.println("Message received from:");
+    }
     
     // Read message bytes and set the RGB variable
     while(c=sms.read()){
       processPayload(c);
     }
-          
-    Serial.println("\nEND OF MESSAGE");
-    
+            
     // Delete message from modem memory
     sms.flush();
-    Serial.println("MESSAGE DELETED");
+    if (DEBUG) {
+      Serial.println("MESSAGE DELETED");
+    }
   }
 
   delay(500);
